@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'astronomy.dart';
 
 class SensorTrackerApp extends StatefulWidget {
   const SensorTrackerApp({super.key});
@@ -14,6 +15,8 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
   Position? _currentPosition;
   AccelerometerEvent? _accelerometer;
   MagnetometerEvent? _magnetometer;
+  List<String>? _bodies;
+  String? _bodiesError;
 
   StreamSubscription<Position>? _gpsSubscription;
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
@@ -24,6 +27,16 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     super.initState();
     _initGPS();
     _initHardwareSensors();
+    _loadBodies();
+  }
+
+  Future<void> _loadBodies() async {
+    try {
+      final bodies = await fetchBodies();
+      setState(() => _bodies = bodies);
+    } catch (e) {
+      setState(() => _bodiesError = e.toString());
+    }
   }
 
   Future<void> _initGPS() async {
@@ -44,7 +57,7 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     _gpsSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 1, 
+        distanceFilter: 1,
       ),
     ).listen((Position position) {
       setState(() => _currentPosition = position);
@@ -73,11 +86,19 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Sensor Tracker')),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text('Celestial Bodies', style: Theme.of(context).textTheme.titleMedium),
+            if (_bodiesError != null)
+              Text('Error: $_bodiesError', style: const TextStyle(color: Colors.red))
+            else if (_bodies == null)
+              const Text('Loading bodies...')
+            else
+              Text(_bodies!.join(', ')),
+            const Divider(height: 32),
             Text('GPS', style: Theme.of(context).textTheme.titleMedium),
             Text(_currentPosition == null
                 ? 'Waiting for location...'

@@ -1,3 +1,3 @@
-# galaxy
+# to run app
+flutter run --dart-define-from-file=env.json 
 
-A new Flutter project.
