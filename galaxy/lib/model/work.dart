@@ -22,10 +22,6 @@ const double _kAngleAlpha = 0.10;
 
 class _SensorTrackerAppState extends State<SensorTrackerApp> {
   Position? _currentPosition;
-  AccelerometerEvent? _accelerometer;
-  MagnetometerEvent? _magnetometer;
-  SkyObjects? _skyObjects;
-  String? _skyError;
 
   // Smoothed sensor values used for rendering (low-pass filtered).
   double _sAccX = 0, _sAccY = 0, _sAccZ = 0;
@@ -40,10 +36,10 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
   Offset? _sunVirtual;
   Offset? _moonVirtual;
   double _moonPhase = 0.5;
-  SkyPosition? _sunPos;
-  SkyPosition? _moonPos;
   Timer? _celestialTimer;
   Timer? _renderTimer;
+
+  String? _targetBody; // 'sun' or 'moon'
 
   StreamSubscription<Position>? _gpsSubscription;
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
@@ -54,7 +50,6 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     super.initState();
     _initGPS();
     _initHardwareSensors();
-    _loadSkyObjects();
     _celestialTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _updateCelestialPositions();
     });
@@ -65,15 +60,6 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
         setState(() {});
       }
     });
-  }
-
-  Future<void> _loadSkyObjects() async {
-    try {
-      final objects = await fetchSkyObjects();
-      setState(() => _skyObjects = objects);
-    } catch (e) {
-      setState(() => _skyError = e.toString());
-    }
   }
 
   Future<void> _initGPS() async {
@@ -105,7 +91,6 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
   void _initHardwareSensors() {
     _accelSubscription =
         accelerometerEventStream().listen((AccelerometerEvent event) {
-      _accelerometer = event;
       if (!_sensorsInitialized) {
         _sAccX = event.x; _sAccY = event.y; _sAccZ = event.z;
       } else {
@@ -117,7 +102,6 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
 
     _magSubscription =
         magnetometerEventStream().listen((MagnetometerEvent event) {
-      _magnetometer = event;
       if (!_sensorsInitialized) {
         _sMagX = event.x; _sMagY = event.y; _sMagZ = event.z;
         _sensorsInitialized = true;
@@ -136,11 +120,9 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     final sunPos  = computeSunPosition(pos.latitude, pos.longitude, now);
     final moonPos = computeMoonPosition(pos.latitude, pos.longitude, now);
     setState(() {
-      _sunPos       = sunPos;
-      _moonPos      = moonPos;
-      _sunVirtual   = skyToVirtual(sunPos.azimuth,  sunPos.altitude);
-      _moonVirtual  = skyToVirtual(moonPos.azimuth, moonPos.altitude);
-      _moonPhase    = computeMoonPhase(now);
+      _sunVirtual  = skyToVirtual(sunPos.azimuth,  sunPos.altitude);
+      _moonVirtual = skyToVirtual(moonPos.azimuth, moonPos.altitude);
+      _moonPhase   = computeMoonPhase(now);
     });
   }
 
@@ -206,55 +188,34 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
             ),
             child: const SizedBox.expand(),
           ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 32,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: DefaultTextStyle(
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildSkySection(context),
-                    const Divider(height: 20, color: Colors.white12),
-                    if (_sunPos != null)
-                      Text('Sun  az:${_sunPos!.azimuth.toStringAsFixed(1)}°  '
-                           'alt:${_sunPos!.altitude.toStringAsFixed(1)}°'),
-                    if (_moonPos != null)
-                      Text('Moon az:${_moonPos!.azimuth.toStringAsFixed(1)}°  '
-                           'alt:${_moonPos!.altitude.toStringAsFixed(1)}°'),
-                    if (_anglesInitialized)
-                      Text('Device az:${_smoothedAz.toStringAsFixed(1)}°  '
-                           'elev:${_smoothedElev.toStringAsFixed(1)}°'),
-                    const SizedBox(height: 4),
-                    Text(
-                      _currentPosition == null
-                          ? 'GPS: waiting...'
-                          : 'GPS  ${_currentPosition!.latitude.toStringAsFixed(4)}, '
-                              '${_currentPosition!.longitude.toStringAsFixed(4)}',
-                    ),
-                    const SizedBox(height: 4),
-                    Text(_accelerometer == null
-                        ? 'Accel: waiting...'
-                        : 'Accel  x:${_accelerometer!.x.toStringAsFixed(2)} '
-                            'y:${_accelerometer!.y.toStringAsFixed(2)} '
-                            'z:${_accelerometer!.z.toStringAsFixed(2)}'),
-                    const SizedBox(height: 4),
-                    Text(_magnetometer == null
-                        ? 'Mag: waiting...'
-                        : 'Mag  x:${_magnetometer!.x.toStringAsFixed(1)} '
-                            'y:${_magnetometer!.y.toStringAsFixed(1)} '
-                            'z:${_magnetometer!.z.toStringAsFixed(1)}'),
-                  ],
+          if (_targetBody != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _GuideArrowPainter(
+                    deviceOffset: _starOffset,
+                    targetVirtual: _targetBody == 'sun' ? _sunVirtual : _moonVirtual,
+                    arrowColor: _targetBody == 'sun'
+                        ? Colors.amber
+                        : const Color(0xFFB0BEC5),
+                  ),
                 ),
+              ),
+            ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 40,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  _buildChip('Sun', Icons.wb_sunny, Colors.amber, 'sun'),
+                  const SizedBox(width: 10),
+                  _buildChip('Moon', Icons.nightlight_round,
+                      const Color(0xFFB0BEC5), 'moon'),
+                ],
               ),
             ),
           ),
@@ -263,57 +224,131 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     );
   }
 
-  Widget _buildSkySection(BuildContext context) {
-    final titleStyle = Theme.of(context)
-        .textTheme
-        .titleSmall
-        ?.copyWith(color: Colors.white);
-
-    if (_skyError != null) {
-      return Text('Error: $_skyError',
-          style: const TextStyle(color: Colors.redAccent));
-    }
-
-    if (_skyObjects == null) {
-      return const Text('Loading sky objects...');
-    }
-
-    final obj = _skyObjects!;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _SkyRow(label: 'Sun', value: obj.sun, style: titleStyle),
-        const SizedBox(height: 6),
-        _SkyRow(label: 'Moon', value: obj.moon, style: titleStyle),
-        const SizedBox(height: 6),
-        Text('Planets', style: titleStyle),
-        const SizedBox(height: 2),
-        Text(obj.planets.join('  ·  ')),
-        const SizedBox(height: 6),
-        Text('Constellations', style: titleStyle),
-        const SizedBox(height: 2),
-        Text(obj.constellations.join('  ·  ')),
-      ],
+  Widget _buildChip(String label, IconData icon, Color color, String body) {
+    final selected = _targetBody == body;
+    return GestureDetector(
+      onTap: () => setState(() => _targetBody = selected ? null : body),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.2)
+              : Colors.black.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: selected ? color : Colors.white24,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: selected ? color : Colors.white70, size: 18),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? color : Colors.white70,
+                fontSize: 14,
+                fontWeight:
+                    selected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _SkyRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final TextStyle? style;
+class _GuideArrowPainter extends CustomPainter {
+  final Offset deviceOffset;
+  final Offset? targetVirtual;
+  final Color arrowColor;
 
-  const _SkyRow({required this.label, required this.value, this.style});
+  const _GuideArrowPainter({
+    required this.deviceOffset,
+    required this.targetVirtual,
+    required this.arrowColor,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text('$label  ', style: style),
-        Text(value),
-      ],
+  void paint(Canvas canvas, Size size) {
+    if (targetVirtual == null) return;
+
+    final screenPos = skyToScreen(targetVirtual!, deviceOffset, size);
+    final center = Offset(size.width / 2, size.height / 2);
+
+    const pad = 64.0;
+    final onScreen = Rect.fromLTWH(
+      pad, pad, size.width - pad * 2, size.height - pad * 2,
+    ).contains(screenPos);
+
+    if (onScreen) {
+      _drawTargetRing(canvas, screenPos);
+    } else {
+      final angle = atan2(screenPos.dy - center.dy, screenPos.dx - center.dx);
+      _drawArrow(canvas, _edgePoint(center, angle, size), angle);
+    }
+  }
+
+  void _drawTargetRing(Canvas canvas, Offset pos) {
+    final paint = Paint()
+      ..color = arrowColor.withValues(alpha: 0.85)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+    canvas.drawCircle(pos, 30, paint);
+    canvas.drawLine(Offset(pos.dx - 12, pos.dy), Offset(pos.dx + 12, pos.dy), paint);
+    canvas.drawLine(Offset(pos.dx, pos.dy - 12), Offset(pos.dx, pos.dy + 12), paint);
+  }
+
+  Offset _edgePoint(Offset center, double angle, Size size) {
+    const margin = 44.0;
+    final c = cos(angle), s = sin(angle);
+    double t = double.infinity;
+    if (c >  1e-6) t = min(t, (size.width  - margin - center.dx) / c);
+    if (c < -1e-6) t = min(t, (margin - center.dx) / c);
+    if (s >  1e-6) t = min(t, (size.height - margin - center.dy) / s);
+    if (s < -1e-6) t = min(t, (margin - center.dy) / s);
+    return Offset(center.dx + t * c, center.dy + t * s);
+  }
+
+  void _drawArrow(Canvas canvas, Offset origin, double angle) {
+    const r = 22.0;
+    // Triangle pointing in `angle` direction, base behind origin.
+    final tip   = origin + Offset(cos(angle) * r,        sin(angle) * r);
+    final left  = origin + Offset(cos(angle + 2.6) * r * 0.6, sin(angle + 2.6) * r * 0.6);
+    final right = origin + Offset(cos(angle - 2.6) * r * 0.6, sin(angle - 2.6) * r * 0.6);
+
+    final path = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(left.dx, left.dy)
+      ..lineTo(right.dx, right.dy)
+      ..close();
+
+    // Glow
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = arrowColor.withValues(alpha: 0.3)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+    );
+    // Fill
+    canvas.drawPath(path, Paint()..color = arrowColor);
+    // Rim
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
     );
   }
+
+  @override
+  bool shouldRepaint(_GuideArrowPainter old) =>
+      old.deviceOffset != deviceOffset ||
+      old.targetVirtual != targetVirtual ||
+      old.arrowColor != arrowColor;
 }

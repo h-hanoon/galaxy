@@ -30,6 +30,16 @@ Offset skyToVirtual(double azimuth, double altitude) {
   return Offset(x, y);
 }
 
+/// Maps a virtual sky coordinate to screen position given the device's current view offset.
+Offset skyToScreen(Offset virtual, Offset deviceOffset, Size screenSize) {
+  const fullAz = 360.0 * _kAzSensitivity;
+  var dx = virtual.dx - deviceOffset.dx;
+  if (dx >  fullAz / 2) dx -= fullAz;
+  if (dx < -fullAz / 2) dx += fullAz;
+  final dy = virtual.dy - deviceOffset.dy;
+  return Offset(screenSize.width / 2 + dx, screenSize.height / 2 + dy);
+}
+
 class StarFieldPainter extends CustomPainter {
   final Offset offset;
   final Offset? sunVirtual;
