@@ -32,6 +32,7 @@ const _planetOrder = [
 
 const _selectedConstellations = ['Orion', 'Ursa Major', 'Cassiopeia'];
 
+
 Future<SkyObjects> fetchSkyObjects() async {
   final credentials = base64Encode(utf8.encode('$_appId:$_appSecret'));
   final response = await http.get(
@@ -236,4 +237,96 @@ SkyPosition computePlanetPosition(
       cos(latR) * sin(dec) - sin(latR) * cos(dec) * cos(ha))) + 360) % 360;
 
   return SkyPosition(az, alt);
+}
+
+// ── Constellation positions ───────────────────────────────────────────────────
+
+// J2000 equatorial coords [RA°, Dec°] for each star in draw order.
+const _kConstellationStars = <String, List<List<double>>>{
+  'Orion': [
+    [ 88.79,  7.41],  // 0 Betelgeuse
+    [ 81.28,  6.35],  // 1 Bellatrix
+    [ 83.00, -0.30],  // 2 Mintaka
+    [ 84.05, -1.20],  // 3 Alnilam
+    [ 85.19, -1.94],  // 4 Alnitak
+    [ 86.94, -9.67],  // 5 Saiph
+    [ 78.63, -8.20],  // 6 Rigel
+  ],
+  'Ursa Major': [
+    [165.93, 61.75],  // 0 Dubhe
+    [165.46, 56.38],  // 1 Merak
+    [178.46, 53.69],  // 2 Phad
+    [183.86, 57.03],  // 3 Megrez
+    [193.51, 55.96],  // 4 Alioth
+    [200.98, 54.93],  // 5 Mizar
+    [206.89, 49.31],  // 6 Alkaid
+  ],
+  'Cassiopeia': [
+    [  2.29, 59.15],  // 0 Caph
+    [ 10.12, 56.54],  // 1 Schedar
+    [ 14.18, 60.72],  // 2 γ Cas
+    [ 21.45, 60.24],  // 3 Ruchbah
+    [ 28.60, 63.67],  // 4 Segin
+  ],
+};
+
+// Index pairs (a, b) meaning "draw a line from star[a] to star[b]".
+const _kConstellationLines = <String, List<(int, int)>>{
+  'Orion': [
+    (0, 1),  // Betelgeuse – Bellatrix (shoulders)
+    (0, 4),  // Betelgeuse – Alnitak
+    (1, 2),  // Bellatrix  – Mintaka
+    (2, 3),  // belt
+    (3, 4),  // belt
+    (4, 5),  // Alnitak – Saiph
+    (2, 6),  // Mintaka – Rigel
+  ],
+  'Ursa Major': [
+    (0, 1),  // Dubhe  – Merak   (front of bowl)
+    (1, 2),  // Merak  – Phad    (bottom)
+    (2, 3),  // Phad   – Megrez  (back)
+    (3, 0),  // Megrez – Dubhe   (top)
+    (3, 4),  // Megrez – Alioth  (handle)
+    (4, 5),  // Alioth – Mizar
+    (5, 6),  // Mizar  – Alkaid
+  ],
+  'Cassiopeia': [
+    (0, 1),  // Caph    – Schedar
+    (1, 2),  // Schedar – γ Cas
+    (2, 3),  // γ Cas   – Ruchbah
+    (3, 4),  // Ruchbah – Segin
+  ],
+};
+
+class ConstellationLayout {
+  final List<SkyPosition> stars;
+  final List<(int, int)> lines;
+  const ConstellationLayout({required this.stars, required this.lines});
+}
+
+SkyPosition _raDecToAltAz(
+    double raDeg, double decDeg, double lat, double lon, DateTime utc) {
+  final n    = _julianDay(utc) - 2451545.0;
+  final dec  = _toRad(decDeg);
+  final gmst = (6.697375 + 0.0657098242 * n +
+      utc.hour + utc.minute / 60.0 + utc.second / 3600.0) % 24;
+  final ha   = _toRad(((gmst + lon / 15.0) % 24) * 15 - raDeg);
+  final latR = _toRad(lat);
+  final alt  = _toDeg(asin(
+      sin(latR) * sin(dec) + cos(latR) * cos(dec) * cos(ha)));
+  final az   = (_toDeg(atan2(
+      -cos(dec) * sin(ha),
+      cos(latR) * sin(dec) - sin(latR) * cos(dec) * cos(ha))) + 360) % 360;
+  return SkyPosition(az, alt);
+}
+
+ConstellationLayout computeConstellationLayout(
+    String name, double lat, double lon, DateTime utc) {
+  final starData = _kConstellationStars[name]!;
+  return ConstellationLayout(
+    stars: starData
+        .map((s) => _raDecToAltAz(s[0], s[1], lat, lon, utc))
+        .toList(),
+    lines: _kConstellationLines[name]!,
+  );
 }

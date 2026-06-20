@@ -38,6 +38,7 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
   Offset? _moonVirtual;
   double _moonPhase = 0.5;
   Map<String, Offset> _planetVirtuals = {};
+  Map<String, ConstellationVirtual> _constellationVirtuals = {};
   Timer? _celestialTimer;
   Timer? _renderTimer;
 
@@ -125,11 +126,21 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
       final p = computePlanetPosition(id, pos.latitude, pos.longitude, now);
       planets[id] = skyToVirtual(p.azimuth, p.altitude);
     }
+    const constellationNames = ['Orion', 'Ursa Major', 'Cassiopeia'];
+    final constellations = <String, ConstellationVirtual>{};
+    for (final name in constellationNames) {
+      final layout = computeConstellationLayout(name, pos.latitude, pos.longitude, now);
+      constellations[name] = ConstellationVirtual(
+        stars: layout.stars.map((s) => skyToVirtual(s.azimuth, s.altitude)).toList(),
+        lines: layout.lines,
+      );
+    }
     setState(() {
-      _sunVirtual     = skyToVirtual(sunPos.azimuth,  sunPos.altitude);
-      _moonVirtual    = skyToVirtual(moonPos.azimuth, moonPos.altitude);
-      _moonPhase      = computeMoonPhase(now);
-      _planetVirtuals = planets;
+      _sunVirtual              = skyToVirtual(sunPos.azimuth,  sunPos.altitude);
+      _moonVirtual             = skyToVirtual(moonPos.azimuth, moonPos.altitude);
+      _moonPhase               = computeMoonPhase(now);
+      _planetVirtuals          = planets;
+      _constellationVirtuals   = constellations;
     });
   }
 
@@ -184,13 +195,23 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     if (_targetBody == null) return null;
     if (_targetBody == 'sun') return _sunVirtual;
     if (_targetBody == 'moon') return _moonVirtual;
-    return _planetVirtuals[_targetBody];
+    final pv = _planetVirtuals[_targetBody];
+    if (pv != null) return pv;
+    // Constellation: guide to the centroid of its stars.
+    final cv = _constellationVirtuals[_targetBody];
+    if (cv != null && cv.stars.isNotEmpty) {
+      final dx = cv.stars.map((s) => s.dx).reduce((a, b) => a + b) / cv.stars.length;
+      final dy = cv.stars.map((s) => s.dy).reduce((a, b) => a + b) / cv.stars.length;
+      return Offset(dx, dy);
+    }
+    return null;
   }
 
   Color _bodyColor(String body) => switch (body) {
-    'sun'  => Colors.amber,
-    'moon' => const Color(0xFFB0BEC5),
-    _      => planetColor(body),
+    'sun'         => Colors.amber,
+    'moon'        => const Color(0xFFB0BEC5),
+    'Orion' || 'Ursa Major' || 'Cassiopeia' => const Color(0xFF8EC8E8),
+    _             => planetColor(body),
   };
 
   void _onCanvasTap(BuildContext context, Offset tapPos) {
@@ -217,6 +238,14 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
         return;
       }
     }
+    for (final entry in _constellationVirtuals.entries) {
+      for (final starVirt in entry.value.stars) {
+        if ((tapPos - skyToScreen(starVirt, _starOffset, size)).distance < hitRadius) {
+          _showBodyDetail(context, entry.key);
+          return;
+        }
+      }
+    }
   }
 
   void _showBodyDetail(BuildContext context, String body) {
@@ -239,10 +268,11 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
             child: CustomPaint(
               painter: StarFieldPainter(
                 _starOffset,
-                sunVirtual:     _sunVirtual,
-                moonVirtual:    _moonVirtual,
-                moonPhase:      _moonPhase,
-                planetVirtuals: _planetVirtuals,
+                sunVirtual:            _sunVirtual,
+                moonVirtual:           _moonVirtual,
+                moonPhase:             _moonPhase,
+                planetVirtuals:        _planetVirtuals,
+                constellationVirtuals: _constellationVirtuals,
               ),
               child: const SizedBox.expand(),
             ),
@@ -281,11 +311,54 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
                       id,
                     ),
                   )),
+                  ...['Orion', 'Ursa Major', 'Cassiopeia'].map((name) => Padding(
+                    padding: const EdgeInsets.only(left: 10),
+                    child: _buildConstellationChip(name),
+                  )),
                 ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildConstellationChip(String name) {
+    const color = Color(0xFF8EC8E8);
+    final selected = _targetBody == name;
+    return GestureDetector(
+      onTap: () => setState(() => _targetBody = selected ? null : name),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.2)
+              : Colors.black.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: selected ? color : color.withValues(alpha: 0.4),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.auto_awesome,
+                color: selected ? color : color.withValues(alpha: 0.65),
+                size: 15),
+            const SizedBox(width: 6),
+            Text(
+              name,
+              style: TextStyle(
+                color: selected ? color : color.withValues(alpha: 0.65),
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

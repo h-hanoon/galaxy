@@ -24,3 +24,10 @@ flutter:
   assets:
     - lib/assets/sun.glb
     - lib/assets/the_moon.glb
+    - lib/assets/mercury_natural_color.glb
+    - lib/assets/venus.glb
+    - lib/assets/mars.glb
+    - lib/assets/jupiter.glb
+    - lib/assets/saturno_v1.1.glb
+    - lib/assets/uranus.glb
+    - lib/assets/neptune.glb

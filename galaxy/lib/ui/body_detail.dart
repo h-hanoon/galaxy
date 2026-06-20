@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'star_field.dart';
 
+const _kConstellations = {'Orion', 'Ursa Major', 'Cassiopeia'};
+
 class BodyDetailSheet extends StatelessWidget {
   final String body;
 
@@ -9,9 +11,12 @@ class BodyDetailSheet extends StatelessWidget {
 
   bool get _isSun => body == 'sun';
   bool get _isMoon => body == 'moon';
+  bool get _isConstellation => _kConstellations.contains(body);
 
   @override
   Widget build(BuildContext context) {
+    if (_isConstellation) return _buildConstellationSheet(context);
+
     final color = _isSun
         ? Colors.amber
         : _isMoon
@@ -39,17 +44,7 @@ class BodyDetailSheet extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Drag handle
-          Container(
-            margin: const EdgeInsets.only(top: 12, bottom: 4),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          // Label row
+          _dragHandle(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             child: Row(
@@ -68,25 +63,19 @@ class BodyDetailSheet extends StatelessWidget {
               ],
             ),
           ),
-          // Visual
           Expanded(
             flex: 5,
-            child: _isSun || _isMoon
-                ? ModelViewer(
-                    src: _isSun
-                        ? 'lib/assets/sun.glb'
-                        : 'lib/assets/the_moon.glb',
-                    autoRotate: true,
-                    autoRotateDelay: 0,
-                    rotationPerSecond: '8deg',
-                    cameraControls: true,
-                    disableZoom: false,
-                    backgroundColor: const Color(0xFF080820),
-                    interactionPrompt: InteractionPrompt.none,
-                  )
-                : Center(child: _PlanetVisual(color: color)),
+            child: ModelViewer(
+              src: _glbPath(body),
+              autoRotate: true,
+              autoRotateDelay: 0,
+              rotationPerSecond: '8deg',
+              cameraControls: true,
+              disableZoom: false,
+              backgroundColor: const Color(0xFF080820),
+              interactionPrompt: InteractionPrompt.none,
+            ),
           ),
-          // Description
           Expanded(
             flex: 4,
             child: SingleChildScrollView(
@@ -105,50 +94,122 @@ class BodyDetailSheet extends StatelessWidget {
       ),
     );
   }
-}
 
-class _PlanetVisual extends StatelessWidget {
-  final Color color;
-  const _PlanetVisual({required this.color});
+  Widget _buildConstellationSheet(BuildContext context) {
+    const color = Color(0xFF8EC8E8);
 
-  @override
-  Widget build(BuildContext context) {
     return Container(
-      width: 180,
-      height: 180,
+      height: MediaQuery.of(context).size.height * 0.88,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [
-            color,
-            color.withValues(alpha: 0.4),
-            Colors.transparent,
-          ],
-          stops: const [0.45, 0.75, 1.0],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.25),
-            blurRadius: 48,
-            spreadRadius: 8,
+        color: const Color(0xFF080820),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _dragHandle(),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: color, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  body,
+                  style: const TextStyle(
+                    color: color,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Big decorative title
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  body.toUpperCase(),
+                  style: TextStyle(
+                    color: color.withValues(alpha: 0.12),
+                    fontSize: 54,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 6,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  width: 48,
+                  height: 1.5,
+                  color: color.withValues(alpha: 0.35),
+                ),
+              ],
+            ),
+          ),
+          // Description — large text, full remaining space
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+              child: Text(
+                _bodyDescription(body),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 17,
+                  height: 1.85,
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
+
+  Widget _dragHandle() => Container(
+        margin: const EdgeInsets.only(top: 12, bottom: 4),
+        width: 40,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.white24,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
 }
 
+String _glbPath(String body) => switch (body) {
+  'sun'     => 'lib/assets/sun.glb',
+  'moon'    => 'lib/assets/the_moon.glb',
+  'mercury' => 'lib/assets/mercury_natural_color.glb',
+  'venus'   => 'lib/assets/venus.glb',
+  'mars'    => 'lib/assets/mars.glb',
+  'jupiter' => 'lib/assets/jupiter.glb',
+  'saturn'  => 'lib/assets/saturno_v1.1.glb',
+  'uranus'  => 'lib/assets/uranus.glb',
+  'neptune' => 'lib/assets/neptune.glb',
+  _         => 'lib/assets/sun.glb',
+};
+
 String _bodyDescription(String body) => switch (body) {
-  'sun'     => _sunDescription,
-  'moon'    => _moonDescription,
-  'mercury' => _mercuryDescription,
-  'venus'   => _venusDescription,
-  'mars'    => _marsDescription,
-  'jupiter' => _jupiterDescription,
-  'saturn'  => _saturnDescription,
-  'uranus'  => _uranusDescription,
-  'neptune' => _neptuneDescription,
-  _         => '',
+  'sun'         => _sunDescription,
+  'moon'        => _moonDescription,
+  'mercury'     => _mercuryDescription,
+  'venus'       => _venusDescription,
+  'mars'        => _marsDescription,
+  'jupiter'     => _jupiterDescription,
+  'saturn'      => _saturnDescription,
+  'uranus'      => _uranusDescription,
+  'neptune'     => _neptuneDescription,
+  'Orion'       => _orionDescription,
+  'Ursa Major'  => _ursaMajorDescription,
+  'Cassiopeia'  => _cassiopeiaDescription,
+  _             => '',
 };
 
 const String _sunDescription =
@@ -290,3 +351,56 @@ const String _neptuneDescription =
     'contraction. Its largest moon, Triton, orbits backwards and is almost '
     'certainly a captured Kuiper Belt object, destined to be torn apart by tidal '
     'forces in about 3.6 billion years.';
+
+const String _orionDescription =
+    'Orion the Hunter is one of the most recognisable constellations in the night '
+    'sky, visible from virtually every corner of the Earth. Named after the giant '
+    'huntsman of Greek mythology, it dominates the winter sky in the northern '
+    'hemisphere and the summer sky in the southern.\n\n'
+    'The constellation\'s most distinctive feature is the Belt of Orion — three '
+    'bright stars in a nearly perfect straight line: Mintaka, Alnilam, and '
+    'Alnitak. Below the belt hangs the Orion Nebula (M42), one of the '
+    'most-studied objects in the sky and an active stellar nursery where new stars '
+    'are being born right now.\n\n'
+    'Two supergiants anchor the figure: blood-red Betelgeuse marks the hunter\'s '
+    'shoulder — a dying star so enormous it could swallow the entire inner Solar '
+    'System — while brilliant blue-white Rigel blazes at his opposite foot, one '
+    'of the most luminous stars known.\n\n'
+    'The belt stars rise nearly due east and set nearly due west from any point '
+    'on Earth, making Orion a reliable compass used by sailors, travellers, and '
+    'astronomers across cultures for thousands of years.';
+
+const String _ursaMajorDescription =
+    'Ursa Major — the Great Bear — is one of the oldest named constellations, '
+    'recognised by peoples across Europe, Asia, and the Americas long before '
+    'written history. Its most familiar asterism, the Big Dipper (or Plough in '
+    'British tradition), forms a ladle shape that serves as a celestial signpost '
+    'across the northern sky all year long.\n\n'
+    'The two stars at the far end of the Dipper\'s bowl — Dubhe and Merak — are '
+    'known as the Pointer Stars: extend a line through them five times its length '
+    'and it points directly to Polaris, the North Star, making the Big Dipper '
+    'the most widely used natural compass in history.\n\n'
+    'Most of the Dipper\'s stars are gravitationally related, forming the Ursa '
+    'Major Moving Group — a loose cluster born from the same gas cloud roughly '
+    '300 million years ago and still moving together through space.\n\n'
+    'Mizar, the second star from the end of the handle, has a faint companion '
+    'Alcor just visible to the naked eye — a test of sharp vision used since '
+    'antiquity and today known to be a genuine wide binary system.';
+
+const String _cassiopeiaDescription =
+    'Cassiopeia the Queen sits directly across Polaris from the Big Dipper, '
+    'making it circumpolar from most northern latitudes — it never dips below '
+    'the horizon. Its five brightest stars form an unmistakeable W or M shape '
+    'depending on its orientation, one of the most instantly recognisable '
+    'patterns in the sky.\n\n'
+    'In Greek mythology, Cassiopeia was a vain Ethiopian queen who boasted that '
+    'her daughter Andromeda surpassed the sea nymphs in beauty, drawing the wrath '
+    'of Poseidon. As punishment she was placed in the heavens, forever circling '
+    'the celestial pole — sometimes hanging upside down in an undignified pose.\n\n'
+    'The constellation straddles the band of the Milky Way and contains several '
+    'striking deep-sky objects, including the open clusters M52 and the Owl '
+    'Cluster (NGC 457), whose two bright stars resemble a pair of glowing eyes.\n\n'
+    'In November 1572, Tycho Brahe observed a brilliant new star blaze into view '
+    'within Cassiopeia — now called Tycho\'s Supernova. Visible in daylight for '
+    'weeks, it shattered the ancient belief that the heavens were fixed and '
+    'unchanging, helping lay the groundwork for the Scientific Revolution.';

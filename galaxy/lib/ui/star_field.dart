@@ -12,6 +12,12 @@ Color planetColor(String id) => switch (id) {
   _         => Colors.white70,
 };
 
+class ConstellationVirtual {
+  final List<Offset> stars;
+  final List<(int, int)> lines;
+  ConstellationVirtual({required this.stars, required this.lines});
+}
+
 const double _kVirtualSize = 2400;
 const int _kStarCount = 300;
 
@@ -57,6 +63,7 @@ class StarFieldPainter extends CustomPainter {
   final Offset? moonVirtual;
   final double moonPhase; // 0=new moon, 0.5=full moon
   final Map<String, Offset> planetVirtuals;
+  final Map<String, ConstellationVirtual> constellationVirtuals;
 
   const StarFieldPainter(
     this.offset, {
@@ -64,6 +71,7 @@ class StarFieldPainter extends CustomPainter {
     this.moonVirtual,
     this.moonPhase = 0.5,
     this.planetVirtuals = const {},
+    this.constellationVirtuals = const {},
   });
 
   @override
@@ -83,6 +91,9 @@ class StarFieldPainter extends CustomPainter {
       }
     }
 
+    for (final entry in constellationVirtuals.entries) {
+      _drawConstellation(canvas, entry.value, entry.key, size);
+    }
     for (final entry in planetVirtuals.entries) {
       _drawPlanet(canvas, _screenPos(entry.value, size), entry.key);
     }
@@ -92,6 +103,46 @@ class StarFieldPainter extends CustomPainter {
     if (moonVirtual != null) {
       _drawMoon(canvas, _screenPos(moonVirtual!, size), moonPhase);
     }
+  }
+
+  void _drawConstellation(
+      Canvas canvas, ConstellationVirtual cv, String name, Size size) {
+    const color = Color(0xFF8EC8E8);
+
+    final screenStars = cv.stars
+        .map((v) => _screenPos(v, size))
+        .toList();
+
+    // Lines between stars
+    final linePaint = Paint()
+      ..color = color.withValues(alpha: 0.30)
+      ..strokeWidth = 0.9
+      ..style = PaintingStyle.stroke;
+    for (final (a, b) in cv.lines) {
+      canvas.drawLine(screenStars[a], screenStars[b], linePaint);
+    }
+
+    // Star dots
+    final dotPaint = Paint()..color = color.withValues(alpha: 0.65);
+    for (final pos in screenStars) {
+      canvas.drawCircle(pos, 1.8, dotPaint);
+    }
+
+    // Label at centroid
+    final cx = screenStars.map((p) => p.dx).reduce((a, b) => a + b) / screenStars.length;
+    final cy = screenStars.map((p) => p.dy).reduce((a, b) => a + b) / screenStars.length;
+    final tp = TextPainter(
+      text: TextSpan(
+        text: name,
+        style: TextStyle(
+          color: color.withValues(alpha: 0.55),
+          fontSize: 9,
+          fontStyle: FontStyle.italic,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(cx - tp.width / 2, cy + 6));
   }
 
   void _drawPlanet(Canvas canvas, Offset pos, String id) {
@@ -228,5 +279,6 @@ class StarFieldPainter extends CustomPainter {
       old.sunVirtual != sunVirtual ||
       old.moonVirtual != moonVirtual ||
       old.moonPhase != moonPhase ||
-      old.planetVirtuals != planetVirtuals;
+      old.planetVirtuals != planetVirtuals ||
+      old.constellationVirtuals != constellationVirtuals;
 }
