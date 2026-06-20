@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'astronomy.dart';
 import '../ui/star_field.dart';
+import '../ui/body_detail.dart';
 
 class SensorTrackerApp extends StatefulWidget {
   const SensorTrackerApp({super.key});
@@ -173,20 +174,52 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     return skyToVirtual(_smoothedAz, _smoothedElev);
   }
 
+  void _onCanvasTap(BuildContext context, Offset tapPos) {
+    final size = MediaQuery.of(context).size;
+    const hitRadius = 44.0;
+
+    if (_sunVirtual != null) {
+      final sunScreen = skyToScreen(_sunVirtual!, _starOffset, size);
+      if ((tapPos - sunScreen).distance < hitRadius) {
+        _showBodyDetail(context, 'sun');
+        return;
+      }
+    }
+    if (_moonVirtual != null) {
+      final moonScreen = skyToScreen(_moonVirtual!, _starOffset, size);
+      if ((tapPos - moonScreen).distance < hitRadius) {
+        _showBodyDetail(context, 'moon');
+        return;
+      }
+    }
+  }
+
+  void _showBodyDetail(BuildContext context, String body) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => BodyDetailSheet(body: body),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF060618),
       body: Stack(
         children: [
-          CustomPaint(
-            painter: StarFieldPainter(
-              _starOffset,
-              sunVirtual:  _sunVirtual,
-              moonVirtual: _moonVirtual,
-              moonPhase:   _moonPhase,
+          GestureDetector(
+            onTapUp: (details) => _onCanvasTap(context, details.localPosition),
+            child: CustomPaint(
+              painter: StarFieldPainter(
+                _starOffset,
+                sunVirtual:  _sunVirtual,
+                moonVirtual: _moonVirtual,
+                moonPhase:   _moonPhase,
+              ),
+              child: const SizedBox.expand(),
             ),
-            child: const SizedBox.expand(),
           ),
           if (_targetBody != null)
             Positioned.fill(

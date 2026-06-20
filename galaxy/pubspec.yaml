@@ -12,6 +12,7 @@ dependencies:
   geolocator: ^13.0.0
   sensors_plus: ^6.1.0
   http: ^1.2.0
+  model_viewer_plus: ^1.10.0
 
 dev_dependencies:
   flutter_test:
@@ -20,3 +21,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - lib/assets/sun.glb
+    - lib/assets/the_moon.glb
