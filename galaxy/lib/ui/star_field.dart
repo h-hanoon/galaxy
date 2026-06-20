@@ -1,6 +1,17 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 
+Color planetColor(String id) => switch (id) {
+  'mercury' => const Color(0xFFB0B0B0),
+  'venus'   => const Color(0xFFFFE4A0),
+  'mars'    => const Color(0xFFEF5350),
+  'jupiter' => const Color(0xFFE8C080),
+  'saturn'  => const Color(0xFFE8D880),
+  'uranus'  => const Color(0xFF80D8E8),
+  'neptune' => const Color(0xFF5080FF),
+  _         => Colors.white70,
+};
+
 const double _kVirtualSize = 2400;
 const int _kStarCount = 300;
 
@@ -45,12 +56,14 @@ class StarFieldPainter extends CustomPainter {
   final Offset? sunVirtual;
   final Offset? moonVirtual;
   final double moonPhase; // 0=new moon, 0.5=full moon
+  final Map<String, Offset> planetVirtuals;
 
   const StarFieldPainter(
     this.offset, {
     this.sunVirtual,
     this.moonVirtual,
     this.moonPhase = 0.5,
+    this.planetVirtuals = const {},
   });
 
   @override
@@ -70,12 +83,37 @@ class StarFieldPainter extends CustomPainter {
       }
     }
 
+    for (final entry in planetVirtuals.entries) {
+      _drawPlanet(canvas, _screenPos(entry.value, size), entry.key);
+    }
     if (sunVirtual != null) {
       _drawSun(canvas, _screenPos(sunVirtual!, size));
     }
     if (moonVirtual != null) {
       _drawMoon(canvas, _screenPos(moonVirtual!, size), moonPhase);
     }
+  }
+
+  void _drawPlanet(Canvas canvas, Offset pos, String id) {
+    final color = planetColor(id);
+    // Glow
+    canvas.drawCircle(
+      pos, 12,
+      Paint()
+        ..color = color.withValues(alpha: 0.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+    // Disc
+    canvas.drawCircle(pos, 4, Paint()..color = color);
+    // Label
+    final tp = TextPainter(
+      text: TextSpan(
+        text: '${id[0].toUpperCase()}${id.substring(1)}',
+        style: TextStyle(color: color.withValues(alpha: 0.75), fontSize: 9),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(pos.dx - tp.width / 2, pos.dy + 6));
   }
 
   Offset _screenPos(Offset virtual, Size size) {
@@ -189,5 +227,6 @@ class StarFieldPainter extends CustomPainter {
       old.offset != offset ||
       old.sunVirtual != sunVirtual ||
       old.moonVirtual != moonVirtual ||
-      old.moonPhase != moonPhase;
+      old.moonPhase != moonPhase ||
+      old.planetVirtuals != planetVirtuals;
 }

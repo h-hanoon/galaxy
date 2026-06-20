@@ -14,22 +14,22 @@ class SensorTrackerApp extends StatefulWidget {
   State<SensorTrackerApp> createState() => _SensorTrackerAppState();
 }
 
-// Raw sensor smoothing — separate alphas because magnetometer is far noisier.
+const _kVisiblePlanets = [
+  'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune',
+];
+
 const double _kAccelAlpha = 0.15;
 const double _kMagAlpha   = 0.05;
 
-// Second-stage smoothing on the computed angles (handles non-linearity of atan2).
 const double _kAngleAlpha = 0.10;
 
 class _SensorTrackerAppState extends State<SensorTrackerApp> {
   Position? _currentPosition;
 
-  // Smoothed sensor values used for rendering (low-pass filtered).
   double _sAccX = 0, _sAccY = 0, _sAccZ = 0;
   double _sMagX = 0, _sMagY = 0, _sMagZ = 0;
   bool _sensorsInitialized = false;
 
-  // Second-stage smoothed output angles.
   double _smoothedAz   = 0;
   double _smoothedElev = 0;
   bool _anglesInitialized = false;
@@ -37,10 +37,11 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
   Offset? _sunVirtual;
   Offset? _moonVirtual;
   double _moonPhase = 0.5;
+  Map<String, Offset> _planetVirtuals = {};
   Timer? _celestialTimer;
   Timer? _renderTimer;
 
-  String? _targetBody; // 'sun' or 'moon'
+  String? _targetBody;
 
   StreamSubscription<Position>? _gpsSubscription;
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
@@ -54,7 +55,6 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     _celestialTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _updateCelestialPositions();
     });
-    // Repaint canvas at ~30 fps; compute smoothed angles here, not in build.
     _renderTimer = Timer.periodic(const Duration(milliseconds: 33), (_) {
       if (mounted) {
         _updateSmoothedAngles();
@@ -120,10 +120,16 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     final now = DateTime.now().toUtc();
     final sunPos  = computeSunPosition(pos.latitude, pos.longitude, now);
     final moonPos = computeMoonPosition(pos.latitude, pos.longitude, now);
+    final planets = <String, Offset>{};
+    for (final id in _kVisiblePlanets) {
+      final p = computePlanetPosition(id, pos.latitude, pos.longitude, now);
+      planets[id] = skyToVirtual(p.azimuth, p.altitude);
+    }
     setState(() {
-      _sunVirtual  = skyToVirtual(sunPos.azimuth,  sunPos.altitude);
-      _moonVirtual = skyToVirtual(moonPos.azimuth, moonPos.altitude);
-      _moonPhase   = computeMoonPhase(now);
+      _sunVirtual     = skyToVirtual(sunPos.azimuth,  sunPos.altitude);
+      _moonVirtual    = skyToVirtual(moonPos.azimuth, moonPos.altitude);
+      _moonPhase      = computeMoonPhase(now);
+      _planetVirtuals = planets;
     });
   }
 
@@ -174,21 +180,40 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
     return skyToVirtual(_smoothedAz, _smoothedElev);
   }
 
+  Offset? _targetVirtual() {
+    if (_targetBody == null) return null;
+    if (_targetBody == 'sun') return _sunVirtual;
+    if (_targetBody == 'moon') return _moonVirtual;
+    return _planetVirtuals[_targetBody];
+  }
+
+  Color _bodyColor(String body) => switch (body) {
+    'sun'  => Colors.amber,
+    'moon' => const Color(0xFFB0BEC5),
+    _      => planetColor(body),
+  };
+
   void _onCanvasTap(BuildContext context, Offset tapPos) {
     final size = MediaQuery.of(context).size;
     const hitRadius = 44.0;
 
     if (_sunVirtual != null) {
-      final sunScreen = skyToScreen(_sunVirtual!, _starOffset, size);
-      if ((tapPos - sunScreen).distance < hitRadius) {
+      if ((tapPos - skyToScreen(_sunVirtual!, _starOffset, size)).distance < hitRadius) {
         _showBodyDetail(context, 'sun');
         return;
       }
     }
     if (_moonVirtual != null) {
-      final moonScreen = skyToScreen(_moonVirtual!, _starOffset, size);
-      if ((tapPos - moonScreen).distance < hitRadius) {
+      if ((tapPos - skyToScreen(_moonVirtual!, _starOffset, size)).distance < hitRadius) {
         _showBodyDetail(context, 'moon');
+        return;
+      }
+    }
+    for (final id in _kVisiblePlanets) {
+      final virt = _planetVirtuals[id];
+      if (virt != null &&
+          (tapPos - skyToScreen(virt, _starOffset, size)).distance < hitRadius) {
+        _showBodyDetail(context, id);
         return;
       }
     }
@@ -214,9 +239,10 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
             child: CustomPaint(
               painter: StarFieldPainter(
                 _starOffset,
-                sunVirtual:  _sunVirtual,
-                moonVirtual: _moonVirtual,
-                moonPhase:   _moonPhase,
+                sunVirtual:     _sunVirtual,
+                moonVirtual:    _moonVirtual,
+                moonPhase:      _moonPhase,
+                planetVirtuals: _planetVirtuals,
               ),
               child: const SizedBox.expand(),
             ),
@@ -227,10 +253,8 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
                 child: CustomPaint(
                   painter: _GuideArrowPainter(
                     deviceOffset: _starOffset,
-                    targetVirtual: _targetBody == 'sun' ? _sunVirtual : _moonVirtual,
-                    arrowColor: _targetBody == 'sun'
-                        ? Colors.amber
-                        : const Color(0xFFB0BEC5),
+                    targetVirtual: _targetVirtual(),
+                    arrowColor: _bodyColor(_targetBody!),
                   ),
                 ),
               ),
@@ -248,6 +272,15 @@ class _SensorTrackerAppState extends State<SensorTrackerApp> {
                   const SizedBox(width: 10),
                   _buildChip('Moon', Icons.nightlight_round,
                       const Color(0xFFB0BEC5), 'moon'),
+                  ..._kVisiblePlanets.map((id) => Padding(
+                    padding: const EdgeInsets.only(left: 10),
+                    child: _buildChip(
+                      '${id[0].toUpperCase()}${id.substring(1)}',
+                      Icons.circle,
+                      planetColor(id),
+                      id,
+                    ),
+                  )),
                 ],
               ),
             ),
